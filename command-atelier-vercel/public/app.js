@@ -225,7 +225,17 @@ async function apiSendCopilotCommand(messageText, audioBase64 = null, audioMimeT
       openModal('passwordGateModal');
       return;
     }
-    const data = await res.json();
+    const rawText = await res.text();
+    let data = null;
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      showCopilotToast(
+        `Server returned a temporary timeout or error (${res.status}). Please try again in a few seconds.`,
+        { isError: true }
+      );
+      return;
+    }
     workspace = data;
     syncTimerWithActiveAction();
 

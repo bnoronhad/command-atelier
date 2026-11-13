@@ -360,9 +360,10 @@ async function callGeminiGenerateContent(
     new Set([
       normalizedPref,
       'gemini-3.8-flash',
-      'gemini-flash-latest',
       'gemini-3.8-pro',
+      'gemini-2.5-flash-lite',
       'gemini-2.5-flash',
+      'gemini-flash-latest',
     ])
   );
 
@@ -371,31 +372,46 @@ async function callGeminiGenerateContent(
 
   const trySingleModel = async (modelId: string) => {
     const cleanModel = modelId.replace(/^models\//, '');
-    const resp = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${encodeURIComponent(effectiveKey)}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
-      }
-    );
-
-    if (resp.ok) {
-      const json: any = await resp.json();
-      const rawText = json?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (rawText) {
-        return { ok: true, parsed: JSON.parse(rawText), status: 200, message: '', model: cleanModel };
-      }
-    }
-
-    let msg = `HTTP ${resp.status}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5500);
     try {
-      const errJson: any = await resp.json();
-      msg = errJson?.error?.message || msg;
-    } catch {
-      // ignore json parse error
+      const resp = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${encodeURIComponent(effectiveKey)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify(requestBody),
+        }
+      );
+
+      if (resp.ok) {
+        const json: any = await resp.json();
+        const rawText = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (rawText) {
+          return { ok: true, parsed: JSON.parse(rawText), status: 200, message: '', model: cleanModel };
+        }
+      }
+
+      let msg = `HTTP ${resp.status}`;
+      try {
+        const errJson: any = await resp.json();
+        msg = errJson?.error?.message || msg;
+      } catch {
+        // ignore json parse error
+      }
+      return { ok: false, parsed: null, status: resp.status, message: msg, model: cleanModel };
+    } catch (err: any) {
+      return {
+        ok: false,
+        parsed: null,
+        status: 504,
+        message: err?.name === 'AbortError' ? 'Request timed out' : (err?.message || 'Network error'),
+        model: cleanModel,
+      };
+    } finally {
+      clearTimeout(timeout);
     }
-    return { ok: false, parsed: null, status: resp.status, message: msg, model: cleanModel };
   };
 
   for (const candidate of candidates) {
@@ -425,8 +441,8 @@ async function callGeminiGenerateContent(
     }
   }
 
-  // Dynamic fallback: query /v1beta/models on the user's API key if all static model IDs returned 404
-  if (lastStatus === 404) {
+  // Dynamic fallback: query /v1beta/models on the user's API key if static model IDs returned 404/503/429
+  if (lastStatus === 404 || lastStatus === 503 || lastStatus === 429) {
     try {
       const listResp = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(effectiveKey)}`
@@ -442,17 +458,17 @@ async function callGeminiGenerateContent(
               typeof m.name === 'string' &&
               m.name.includes('gemini') &&
               !m.name.includes('embedding') &&
-              !m.name.includes('imagen')
+              !m.name.includes('imagen') &&
+              !candidates.includes(String(m.name).replace(/^models\//, ''))
           )
           .map((m) => String(m.name).replace(/^models\//, ''));
 
-        const bestFlash =
-          supported.find((n) => n.includes('3.8') && n.includes('flash')) ||
+        const bestAlt =
           supported.find((n) => n.includes('flash')) ||
           supported[0];
 
-        if (bestFlash) {
-          const dynRes = await trySingleModel(bestFlash);
+        if (bestAlt) {
+          const dynRes = await trySingleModel(bestAlt);
           if (dynRes.ok && dynRes.parsed) {
             return {
               parsed: dynRes.parsed,
