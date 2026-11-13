@@ -24,10 +24,21 @@ async function getPgPool(): Promise<any | null> {
         const mod = await import('pg');
         const Pool = mod.Pool || mod.default?.Pool;
         if (!Pool) return null;
-        const dbUrl = getDatabaseUrl();
-        const isLocal = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1');
+        const rawUrl = getDatabaseUrl();
+        const isLocal = rawUrl.includes('localhost') || rawUrl.includes('127.0.0.1');
+        let cleanUrl = rawUrl;
+        if (!isLocal) {
+          try {
+            const parsed = new URL(rawUrl);
+            parsed.searchParams.delete('channel_binding');
+            parsed.searchParams.delete('sslmode');
+            cleanUrl = parsed.toString();
+          } catch {
+            // keep rawUrl if URL parsing fails
+          }
+        }
         return new Pool({
-          connectionString: dbUrl,
+          connectionString: cleanUrl,
           ssl: isLocal ? false : { rejectUnauthorized: false },
           max: 5,
         });

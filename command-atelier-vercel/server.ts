@@ -2,13 +2,13 @@ import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  handleChatPost,
+  handleDecidePost,
   handleWorkspaceGet,
   handleWorkspacePost,
   type RequestContext,
   verifyAccessPassword,
-} from './src/app/api/workspace/route.ts';
-import { handleChatPost } from './src/app/api/ai/chat/route.ts';
-import { handleDecidePost } from './src/app/api/ai/decide/route.ts';
+} from './src/lib/api-handlers.ts';
 
 const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC_DIR = join(process.cwd(), 'public');

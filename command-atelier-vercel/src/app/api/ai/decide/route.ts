@@ -1,25 +1,8 @@
-import { getGeminiRecommendations } from '../../../../lib/ai-engine.ts';
 import {
   extractRequestContext,
-  handleWorkspaceGet,
-  type RequestContext,
+  handleDecidePost,
   verifyAccessPassword,
-} from '../../workspace/route.ts';
-
-export async function handleDecidePost(body: any, ctx: RequestContext = {}) {
-  const effectiveKey = body?.apiKey || ctx.apiKey;
-  const workspace = await handleWorkspaceGet({ ...ctx, apiKey: effectiveKey });
-  const decision = await getGeminiRecommendations(
-    effectiveKey,
-    ctx.dayBucket,
-    ctx.localDate,
-    ctx.timezone
-  );
-  return {
-    ...workspace,
-    decision,
-  };
-}
+} from '../../../../lib/api-handlers.ts';
 
 export async function POST(req: Request) {
   if (!verifyAccessPassword(req.headers.get('x-access-password'))) {
