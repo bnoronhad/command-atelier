@@ -71,7 +71,7 @@
         <div class="rail-utility-row">
           <button class="btn btn-sm" id="openSettingsBtn" style="flex: 1;">
             <span id="aiStatusDot" style="width: 6px; height: 6px; border-radius: 50%; background: var(--tone-amber);"></span>
-            <span id="aiProviderLabel">Gemini Key</span>
+            <span id="aiProviderLabel">AI Key</span>
           </button>
           <button class="btn btn-sm" id="themeSwitchBtn" title="Switch Dark / Light Frosted Glass">
             Light / Dark
@@ -401,22 +401,25 @@
   <div class="modal-backdrop" id="settingsModalBackdrop">
     <div class="modal-card">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-        <h2 class="serif-display" style="font-size: 1.6rem;">Gemini AI Configuration</h2>
+        <h2 class="serif-display" style="font-size: 1.6rem;">AI Co-Pilot Configuration</h2>
         <button class="btn btn-sm btn-ghost" data-close-modal="settingsModalBackdrop">✕</button>
       </div>
       <p style="font-size: 0.82rem; color: var(--ink-secondary); margin-bottom: 1.15rem;">
-        Enter your Google Gemini API key to enable server-side voice audio transcription, natural Gemini voice synthesis, and Second Brain Co-Pilot control.
+        Enter your OpenAI (<span class="mono">sk-...</span>) or Google Gemini (<span class="mono">AIza...</span>) API key to enable Second Brain Co-Pilot control, voice transcription, and speech synthesis.
       </p>
       <form id="settingsForm" style="display: flex; flex-direction: column; gap: 0.9rem;">
         <div>
-          <label style="font-size: 0.75rem; color: var(--ink-secondary); display: block; margin-bottom: 0.3rem;">Gemini API Key</label>
-          <input class="input mono" id="geminiApiKeyInput" type="password" placeholder="Paste your Gemini API key" />
+          <label style="font-size: 0.75rem; color: var(--ink-secondary); display: block; margin-bottom: 0.3rem;">OpenAI or Gemini API Key</label>
+          <input class="input mono" id="geminiApiKeyInput" type="password" placeholder="Paste your OpenAI (sk-...) or Gemini (AIza...) key" />
         </div>
         <div>
           <label style="font-size: 0.75rem; color: var(--ink-secondary); display: block; margin-bottom: 0.3rem;">Model</label>
           <select class="select" id="geminiModelSelect">
-            <option value="gemini-3.8-flash">gemini-3.8-flash (Fast voice transcription &amp; live control)</option>
-            <option value="gemini-3.8-pro">gemini-3.8-pro (Deep study &amp; syllabus reasoning)</option>
+            <option value="gpt-4o-mini">gpt-4o-mini (OpenAI · Fast &amp; free-tier friendly)</option>
+            <option value="gpt-4.1-mini">gpt-4.1-mini (OpenAI · Smart &amp; fast)</option>
+            <option value="gpt-4o">gpt-4o (OpenAI · Deep reasoning)</option>
+            <option value="gemini-2.5-flash">gemini-2.5-flash (Gemini · Fast voice &amp; live control)</option>
+            <option value="gemini-2.5-pro">gemini-2.5-pro (Gemini · Deep study reasoning)</option>
           </select>
         </div>
         <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem;">

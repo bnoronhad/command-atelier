@@ -449,13 +449,15 @@ function renderRailAndState() {
     b.classList.toggle('btn-gold', b.getAttribute('data-energy') === st.energy_level);
   });
 
-  // Gemini status
-  const hasKey = Boolean(getSavedApiKey()) || Boolean(workspace.serverHasGeminiKey) || dec?.provider === 'gemini';
+  // AI provider status
+  const savedKey = getSavedApiKey();
+  const isOpenAi = savedKey.startsWith('sk-');
+  const hasKey = Boolean(savedKey) || Boolean(workspace.serverHasGeminiKey) || dec?.provider === 'gemini' || dec?.provider === 'openai';
   const dot = document.getElementById('aiStatusDot');
   const label = document.getElementById('aiProviderLabel');
   if (dot && label) {
     dot.style.background = hasKey ? 'var(--tone-emerald)' : 'var(--tone-amber)';
-    label.textContent = hasKey ? 'Gemini Ready' : 'Set Gemini Key';
+    label.textContent = hasKey ? (isOpenAi || dec?.provider === 'openai' ? 'OpenAI Ready' : 'Gemini Ready') : 'Set AI Key';
   }
 }
 
@@ -1927,18 +1929,31 @@ function initEvents() {
     html.setAttribute('data-theme', next);
   };
 
-  // Gemini Settings
+  // AI Settings
   document.getElementById('openSettingsBtn').onclick = () => {
-    document.getElementById('geminiApiKeyInput').value = getSavedApiKey();
-    if (workspace?.userState?.gemini_model) {
-      document.getElementById('geminiModelSelect').value = workspace.userState.gemini_model;
+    const savedKey = getSavedApiKey();
+    document.getElementById('geminiApiKeyInput').value = savedKey;
+    const select = document.getElementById('geminiModelSelect');
+    const currentModel = workspace?.userState?.gemini_model;
+    if (currentModel && Array.from(select.options).some((o) => o.value === currentModel)) {
+      select.value = currentModel;
+    } else if (savedKey.startsWith('sk-')) {
+      select.value = 'gpt-4o-mini';
+    } else {
+      select.value = 'gemini-2.5-flash';
     }
     openModal('settingsModalBackdrop');
   };
   document.getElementById('settingsForm').onsubmit = (e) => {
     e.preventDefault();
-    setSavedApiKey(document.getElementById('geminiApiKeyInput').value);
-    const model = document.getElementById('geminiModelSelect').value;
+    const key = document.getElementById('geminiApiKeyInput').value.trim();
+    setSavedApiKey(key);
+    let model = document.getElementById('geminiModelSelect').value;
+    if (key.startsWith('sk-') && model.startsWith('gemini-')) {
+      model = 'gpt-4o-mini';
+    } else if (key && !key.startsWith('sk-') && model.startsWith('gpt-')) {
+      model = 'gemini-2.5-flash';
+    }
     closeModal('settingsModalBackdrop');
     apiMutate('update_state', { gemini_model: model });
   };

@@ -41,7 +41,7 @@ export interface RecommendationChoice {
 }
 
 export interface DecisionResponse {
-  provider: 'gemini' | 'local_engine';
+  provider: 'gemini' | 'openai' | 'local_engine';
   model: string;
   current_time_of_day: TimeOfDayWindow;
   last_study_mode: StudyMode | null;
@@ -506,6 +506,185 @@ async function callGeminiGenerateContent(
   return { parsed: null, usedModel: normalizedPref, errorStatus: lastStatus, errorMessage: lastMessage };
 }
 
+function isOpenAiKey(key?: string | null): boolean {
+  return Boolean(key && key.trim().startsWith('sk-'));
+}
+
+async function callOpenAiChatCompletions(
+  effectiveKey: string,
+  preferredModel: string | undefined,
+  systemPrompt: string,
+  userPrompt: string
+): Promise<{
+  parsed: any | null;
+  usedModel: string;
+  errorStatus: number;
+  errorMessage: string;
+}> {
+  const normalizedPref =
+    !preferredModel || preferredModel.startsWith('gemini-')
+      ? 'gpt-4o-mini'
+      : preferredModel;
+
+  const candidates = Array.from(
+    new Set([normalizedPref, 'gpt-4o-mini', 'gpt-4.1-mini', 'gpt-4o'])
+  );
+
+  let lastStatus = 0;
+  let lastMessage = '';
+  const startTime = Date.now();
+  const TOTAL_BUDGET_MS = 45000;
+
+  for (const model of candidates) {
+    const remainingBudget = TOTAL_BUDGET_MS - (Date.now() - startTime);
+    if (remainingBudget < 2000) {
+      return { parsed: null, usedModel: model, errorStatus: 504, errorMessage: 'Request timed out' };
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), Math.min(15000, remainingBudget));
+    try {
+      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${effectiveKey}`,
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          model,
+          temperature: 0.2,
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+        }),
+      });
+
+      if (resp.ok) {
+        const json: any = await resp.json();
+        const rawText = json?.choices?.[0]?.message?.content;
+        if (rawText) {
+          return { parsed: JSON.parse(rawText), usedModel: model, errorStatus: 0, errorMessage: '' };
+        }
+      }
+
+      let msg = `HTTP ${resp.status}`;
+      try {
+        const errJson: any = await resp.json();
+        msg = errJson?.error?.message || msg;
+      } catch {
+        // ignore json parse error
+      }
+      lastStatus = resp.status;
+      lastMessage = msg;
+
+      if (resp.status === 401 || resp.status === 403) {
+        return { parsed: null, usedModel: model, errorStatus: resp.status, errorMessage: msg };
+      }
+    } catch (err: any) {
+      lastStatus = 504;
+      lastMessage = err?.name === 'AbortError' ? 'Request timed out' : (err?.message || 'Network error');
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  return { parsed: null, usedModel: normalizedPref, errorStatus: lastStatus, errorMessage: lastMessage };
+}
+
+async function transcribeAudioWithOpenAi(
+  effectiveKey: string,
+  audioBase64: string,
+  audioMimeType = 'audio/webm'
+): Promise<{ text: string | null; errorStatus?: number; errorMessage?: string }> {
+  const cleanMime = (audioMimeType || 'audio/webm').split(';')[0].trim() || 'audio/webm';
+  const ext = cleanMime.includes('mp4')
+    ? 'mp4'
+    : cleanMime.includes('ogg')
+      ? 'ogg'
+      : cleanMime.includes('wav')
+        ? 'wav'
+        : cleanMime.includes('mpeg') || cleanMime.includes('mp3')
+          ? 'mp3'
+          : 'webm';
+
+  const buffer = Buffer.from(audioBase64, 'base64');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const form = new FormData();
+    form.append('file', new Blob([buffer], { type: cleanMime }), `voice.${ext}`);
+    form.append('model', 'whisper-1');
+
+    const resp = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${effectiveKey}`,
+      },
+      signal: controller.signal,
+      body: form,
+    });
+
+    if (resp.ok) {
+      const json: any = await resp.json();
+      const text = String(json?.text || '').trim();
+      return { text: text || null };
+    }
+
+    let msg = `HTTP ${resp.status}`;
+    try {
+      const errJson: any = await resp.json();
+      msg = errJson?.error?.message || msg;
+    } catch {
+      // ignore
+    }
+    return { text: null, errorStatus: resp.status, errorMessage: msg };
+  } catch (err: any) {
+    return {
+      text: null,
+      errorStatus: 504,
+      errorMessage: err?.name === 'AbortError' ? 'Audio transcription timed out' : (err?.message || 'Network error'),
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function synthesizeOpenAiSpeechWav(
+  textToSpeak: string,
+  effectiveKey: string
+): Promise<string | null> {
+  const cleanText = String(textToSpeak || '').trim();
+  if (!cleanText || !effectiveKey) return null;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const resp = await fetch('https://api.openai.com/v1/audio/speech', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${effectiveKey}`,
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: 'tts-1',
+        voice: 'nova',
+        input: cleanText,
+        response_format: 'wav',
+      }),
+    });
+    if (!resp.ok) return null;
+    const arrayBuf = await resp.arrayBuffer();
+    return Buffer.from(arrayBuf).toString('base64');
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function getGeminiRecommendations(
   apiKey?: string,
   dayBucketOverride?: string | null,
@@ -513,7 +692,7 @@ export async function getGeminiRecommendations(
   timezone?: string | null
 ): Promise<DecisionResponse> {
   const localDecision = await computeLocalRecommendations(dayBucketOverride, localDate, timezone);
-  const effectiveKey = (apiKey || process.env.GEMINI_API_KEY || '').trim();
+  const effectiveKey = (apiKey || process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY || '').trim();
   if (!effectiveKey || localDecision.recommendations.length === 0) {
     return localDecision;
   }
@@ -523,7 +702,7 @@ export async function getGeminiRecommendations(
       localDate: localDate || undefined,
       timezone: timezone || undefined,
     });
-    const modelToUse = data.userState?.gemini_model || 'gemini-3.8-flash';
+    const modelToUse = data.userState?.gemini_model || (isOpenAiKey(effectiveKey) ? 'gpt-4o-mini' : 'gemini-2.5-flash');
     const prompt = `You are an executive action & study decision engine.
 Given the user's current context and local candidate recommendations, refine the 3 recommendation reasonings and ordering so they best fit:
 - Available time window: ${data.userState?.available_minutes || 60} minutes
@@ -551,17 +730,24 @@ Return ONLY valid JSON with shape:
   ]
 }`;
 
-    const { parsed, usedModel } = await callGeminiGenerateContent(effectiveKey, modelToUse, {
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.2,
-        responseMimeType: 'application/json',
-      },
-    });
+    const { parsed, usedModel } = isOpenAiKey(effectiveKey)
+      ? await callOpenAiChatCompletions(
+          effectiveKey,
+          modelToUse,
+          'You are an executive action & study decision engine. Return ONLY valid JSON.',
+          prompt
+        )
+      : await callGeminiGenerateContent(effectiveKey, modelToUse, {
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.2,
+            responseMimeType: 'application/json',
+          },
+        });
 
     if (Array.isArray(parsed?.recommendations) && parsed.recommendations.length > 0) {
       return {
-        provider: 'gemini',
+        provider: isOpenAiKey(effectiveKey) ? 'openai' : 'gemini',
         model: usedModel,
         current_time_of_day: localDecision.current_time_of_day,
         last_study_mode: localDecision.last_study_mode,
@@ -699,12 +885,13 @@ export async function processUserChatMessage(
   uiEffects: ClientUiEffects;
 }> {
   const preTurnSnapshot = await captureFullUndoSnapshot();
-  const effectiveKey = (apiKey || process.env.GEMINI_API_KEY || '').trim();
+  const effectiveKey = (apiKey || process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY || '').trim();
+  const usingOpenAi = isOpenAiKey(effectiveKey);
   const hasAudio = Boolean(audioPayload?.audioBase64);
 
   if (hasAudio && !effectiveKey) {
     const errText =
-      'Voice transcription requires your Google Gemini API key. Click "Gemini Key" (bottom left) and paste your API key so voice recordings can be transcribed and executed.';
+      'Voice transcription requires an OpenAI or Gemini API key. Click "Set AI Key" (bottom left) and paste your API key so voice recordings can be transcribed and executed.';
     return {
       reply: errText,
       appliedActions: [],
@@ -742,7 +929,8 @@ export async function processUserChatMessage(
   const memories = data.memories || [];
 
   if (effectiveKey) {
-    const preferredModel = data.userState?.gemini_model || 'gemini-3.8-flash';
+    const preferredModel =
+      data.userState?.gemini_model || (usingOpenAi ? 'gpt-4o-mini' : 'gemini-2.5-flash');
     const systemPrompt = `You are the user's Active Second Brain & Executive Co-Pilot inside "Command Atelier".
 You are not a passive chatbot—you are a sharp, proactive cognitive partner with full live control over their action queue, backlog, study syllabus, study logs, habits/routines, focus timer, and long-term Second Brain Memory Bank.
 
@@ -848,18 +1036,57 @@ Return ONLY valid JSON matching this schema:
     });
 
     try {
-      const {
-        parsed,
-        errorStatus: lastErrorStatus,
-        errorMessage: lastErrorMessage,
-      } = await callGeminiGenerateContent(effectiveKey, preferredModel, {
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-        contents: [{ role: 'user', parts: userParts }],
-        generationConfig: {
-          temperature: 0.25,
-          responseMimeType: 'application/json',
-        },
-      });
+      let parsed: any = null;
+      let lastErrorStatus = 0;
+      let lastErrorMessage = '';
+
+      if (usingOpenAi) {
+        let effectiveUserText = userMessage.trim();
+        let whisperTranscript: string | null = null;
+        if (audioPayload?.audioBase64) {
+          const tx = await transcribeAudioWithOpenAi(
+            effectiveKey,
+            audioPayload.audioBase64,
+            audioPayload.audioMimeType
+          );
+          if (tx.text) {
+            whisperTranscript = tx.text;
+            effectiveUserText = effectiveUserText
+              ? `${effectiveUserText}\n\n[Transcribed Voice Audio]: ${tx.text}`
+              : tx.text;
+          } else {
+            lastErrorStatus = tx.errorStatus || 500;
+            lastErrorMessage = tx.errorMessage || 'Failed to transcribe audio with OpenAI Whisper';
+          }
+        }
+
+        if (effectiveUserText) {
+          const openAiRes = await callOpenAiChatCompletions(
+            effectiveKey,
+            preferredModel,
+            systemPrompt,
+            effectiveUserText
+          );
+          parsed = openAiRes.parsed;
+          lastErrorStatus = openAiRes.errorStatus;
+          lastErrorMessage = openAiRes.errorMessage;
+          if (parsed && whisperTranscript && !parsed.transcribed_user_speech) {
+            parsed.transcribed_user_speech = whisperTranscript;
+          }
+        }
+      } else {
+        const geminiRes = await callGeminiGenerateContent(effectiveKey, preferredModel, {
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents: [{ role: 'user', parts: userParts }],
+          generationConfig: {
+            temperature: 0.25,
+            responseMimeType: 'application/json',
+          },
+        });
+        parsed = geminiRes.parsed;
+        lastErrorStatus = geminiRes.errorStatus;
+        lastErrorMessage = geminiRes.errorMessage;
+      }
 
       if (parsed) {
         const detectedLang: 'pt-BR' | 'en-US' =
@@ -1123,12 +1350,14 @@ Return ONLY valid JSON matching this schema:
           }
         }
       } else {
-        const errMsg = `Gemini API error (${lastErrorStatus || 'network'}): ${lastErrorMessage || 'Could not reach Gemini API'}. Check your Gemini API key in Settings.`;
+        const providerName = usingOpenAi ? 'OpenAI' : 'Gemini';
+        const errMsg = `${providerName} API error (${lastErrorStatus || 'network'}): ${lastErrorMessage || `Could not reach ${providerName} API`}. Check your API key in Settings.`;
         assistantReply = errMsg;
         uiEffects.errorBanner = errMsg;
       }
     } catch (err: any) {
-      const errMsg = `Gemini request failed: ${err?.message || 'Unknown error'}. Check your network or API key in Settings.`;
+      const providerName = usingOpenAi ? 'OpenAI' : 'Gemini';
+      const errMsg = `${providerName} request failed: ${err?.message || 'Unknown error'}. Check your network or API key in Settings.`;
       assistantReply = errMsg;
       uiEffects.errorBanner = errMsg;
     }
@@ -1227,11 +1456,13 @@ Return ONLY valid JSON matching this schema:
       uiEffects.spokenSummary = assistantReply;
     }
     if (effectiveKey && uiEffects.spokenSummary) {
-      const wavBase64 = await synthesizeGeminiSpeechWav(
-        uiEffects.spokenSummary,
-        effectiveKey,
-        uiEffects.detectedLanguage || 'en-US'
-      );
+      const wavBase64 = usingOpenAi
+        ? await synthesizeOpenAiSpeechWav(uiEffects.spokenSummary, effectiveKey)
+        : await synthesizeGeminiSpeechWav(
+            uiEffects.spokenSummary,
+            effectiveKey,
+            uiEffects.detectedLanguage || 'en-US'
+          );
       if (wavBase64) {
         uiEffects.spokenAudioBase64 = wavBase64;
       }

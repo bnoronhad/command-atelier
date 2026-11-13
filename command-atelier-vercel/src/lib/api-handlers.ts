@@ -60,7 +60,7 @@ export async function handleWorkspaceGet(ctx: RequestContext = {}) {
   return {
     ...workspace,
     decision,
-    serverHasGeminiKey: Boolean(process.env.GEMINI_API_KEY),
+    serverHasGeminiKey: Boolean(process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY),
     passwordRequired: Boolean(process.env.ACCESS_PASSWORD),
   };
 }
