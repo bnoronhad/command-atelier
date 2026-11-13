@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Command Atelier — Action, Routine &amp; Study Decision System</title>
+  <meta name="description" content="Single-focus action, syllabus, and study execution system with Gemini voice-controlled AI Co-Pilot." />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+
+  <div class="app-layout">
+
+    <!-- Minimal Left Navigation Rail -->
+    <aside class="left-nav-rail" aria-label="Primary Navigation">
+      <div>
+        <div class="brand-header">
+          <div class="brand-label" id="railClockReadout">-- · --</div>
+          <div class="brand-name">Command Atelier</div>
+
+          <!-- Unified Single Exam Horizon -->
+          <button class="exam-horizon-trigger" id="openExamModalBtn" title="Configure unified exam target date">
+            <div class="exam-horizon-days" id="railExamDays">EXAM HORIZON UNSET</div>
+            <div class="exam-horizon-title" id="railExamName">Set Exam Target Date</div>
+          </button>
+        </div>
+
+        <!-- 4 Single-Focus Views -->
+        <nav class="nav-links" role="navigation">
+          <button class="nav-item active" data-view="now" id="navBtnNow">
+            <span class="nav-item-left">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
+              <span>Now / Focus</span>
+            </span>
+            <span class="nav-shortcut">1</span>
+          </button>
+
+          <button class="nav-item" data-view="queue" id="navBtnQueue">
+            <span class="nav-item-left">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+              <span>Queue &amp; Day Plan</span>
+            </span>
+            <span class="nav-shortcut" id="railQueueCount">0</span>
+          </button>
+
+          <button class="nav-item" data-view="syllabus" id="navBtnSyllabus">
+            <span class="nav-item-left">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+              <span>Syllabus &amp; Study Log</span>
+            </span>
+            <span class="nav-shortcut">3</span>
+          </button>
+
+          <button class="nav-item" data-view="routines" id="navBtnRoutines">
+            <span class="nav-item-left">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+              <span>Routines</span>
+            </span>
+            <span class="nav-shortcut">4</span>
+          </button>
+        </nav>
+      </div>
+
+      <!-- Rail Footer: Current State Trigger, Gemini Config & Theme -->
+      <div class="rail-footer">
+        <button class="state-pill-btn" id="openStateModalBtn" title="Calibrate available time window, context, and energy">
+          <div class="mono" style="font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted);">Current Window &amp; Context</div>
+          <div style="font-size: 0.82rem; font-weight: 600; margin-top: 0.15rem;" id="railStateSummary">60m · home · medium</div>
+        </button>
+
+        <div class="rail-utility-row">
+          <button class="btn btn-sm" id="openSettingsBtn" style="flex: 1;">
+            <span id="aiStatusDot" style="width: 6px; height: 6px; border-radius: 50%; background: var(--tone-amber);"></span>
+            <span id="aiProviderLabel">Gemini Key</span>
+          </button>
+          <button class="btn btn-sm" id="themeSwitchBtn" title="Switch Dark / Light Frosted Glass">
+            Light / Dark
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Single-Focus Main Stage (Only ONE View Rendered Here) -->
+    <main class="single-focus-stage" id="singleFocusStage"></main>
+
+  </div>
+
+  <!-- Floating Frosted-Glass Co-Pilot & Voice Dock (Bottom Center) -->
+  <div class="copilot-dock-wrapper" id="copilotDockWrapper">
+
+    <!-- Live Execution / Diagnostic Toast with 1-Click Undo -->
+    <div class="copilot-toast" id="copilotToast">
+      <div style="min-width: 0; flex: 1;">
+        <div class="mono" id="copilotToastEyebrow" style="font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--tone-emerald);">Co-Pilot Update</div>
+        <div id="copilotToastText" style="font-size: 0.82rem; color: var(--ink-primary); margin-top: 0.1rem;"></div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0;">
+        <button class="btn btn-sm" id="copilotUndoBtn" style="display: none;">Undo</button>
+        <button class="btn btn-sm btn-ghost" id="copilotDismissToastBtn">✕</button>
+      </div>
+    </div>
+
+    <!-- Expandable Transcript History Sheet -->
+    <div class="copilot-transcript-sheet" id="copilotTranscriptSheet">
+      <div style="padding: 0.85rem 1.15rem; border-bottom: 1px solid var(--glass-border); display: flex; justify-content: space-between; align-items: center;">
+        <span class="mono" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-secondary);">Co-Pilot Conversation &amp; Audit Log</span>
+        <div style="display: flex; align-items: center; gap: 0.45rem;">
+          <button class="btn btn-sm btn-ghost" id="toggleTtsBtn" title="Toggle spoken voice replies">TTS: ON</button>
+          <button class="btn btn-sm btn-ghost" id="closeTranscriptSheetBtn">Close</button>
+        </div>
+      </div>
+      <div id="transcriptListContainer" style="padding: 1rem 1.15rem; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem; max-height: 290px;"></div>
+    </div>
+
+    <!-- Floating Command & Voice Input Bar -->
+    <form class="copilot-bar" id="copilotForm">
+      <button type="button" class="voice-mic-btn" id="voiceMicBtn" title="Click to record voice command (or hold Spacebar) — Transcribed by Gemini">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+      </button>
+
+      <span class="mono" id="voiceRecordingBadge" style="display: none; font-size: 0.72rem; color: var(--tone-rose); font-weight: 600; white-space: nowrap;">
+        ● REC 00:00
+      </span>
+
+      <input
+        class="copilot-input"
+        id="copilotInputBox"
+        type="text"
+        placeholder="Speak or type in English or Português to your Second Brain..."
+        autocomplete="off"
+      />
+
+      <button type="button" class="btn btn-sm" id="stopSpeakingBtn" style="display: none; color: var(--accent-gold); border-color: var(--accent-gold);" title="Stop voice playback">
+        ◼ Stop Voice
+      </button>
+      <button type="button" class="btn btn-sm btn-ghost" id="openBrainDumpBarBtn" title="Brain Dump — Ramble or paste everything on your mind">
+        Brain Dump
+      </button>
+      <button type="button" class="btn btn-sm btn-ghost" id="toggleTranscriptBtn" title="View Co-Pilot History">
+        History
+      </button>
+      <button type="submit" class="btn btn-sm btn-primary" id="copilotSubmitBtn" style="border-radius: 999px; padding: 0.4rem 0.9rem;">
+        Execute
+      </button>
+    </form>
+
+  </div>
+
+  <!-- MODAL 1: Calibrate State Window, Context & Energy -->
+  <div class="modal-backdrop" id="stateModal">
+    <div class="modal-card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;">
+        <h2 class="serif-display" style="font-size: 1.6rem;">Calibrate Current State</h2>
+        <button class="btn btn-sm btn-ghost" data-close-modal="stateModal">✕</button>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 1.15rem;">
+        <div>
+          <div class="mono" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); margin-bottom: 0.45rem;">Available Time Window</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 0.4rem;" id="windowPillsContainer">
+            <button class="btn btn-sm" data-window="15">15m</button>
+            <button class="btn btn-sm" data-window="30">30m</button>
+            <button class="btn btn-sm" data-window="45">45m</button>
+            <button class="btn btn-sm" data-window="60">60m</button>
+            <button class="btn btn-sm" data-window="90">90m</button>
+            <button class="btn btn-sm" data-window="120">2h+</button>
+          </div>
+        </div>
+
+        <div>
+          <div class="mono" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); margin-bottom: 0.45rem;">Context / Environment</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 0.4rem;" id="contextPillsContainer">
+            <button class="btn btn-sm" data-context="deep-work-ready">Deep Work Ready</button>
+            <button class="btn btn-sm" data-context="library">Library</button>
+            <button class="btn btn-sm" data-context="home">Home</button>
+            <button class="btn btn-sm" data-context="office">Office</button>
+            <button class="btn btn-sm" data-context="out">Out / Mobile</button>
+          </div>
+        </div>
+
+        <div>
+          <div class="mono" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); margin-bottom: 0.45rem;">Cognitive Capacity</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 0.4rem;" id="energyPillsContainer">
+            <button class="btn btn-sm" data-energy="low">Low / Recovery</button>
+            <button class="btn btn-sm" data-energy="medium">Medium / Steady</button>
+            <button class="btn btn-sm" data-energy="high">High / Peak Focus</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 2: Add Action -->
+  <div class="modal-backdrop" id="newActionModal">
+    <div class="modal-card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.15rem;">
+        <h2 class="serif-display" style="font-size: 1.6rem;">New Action</h2>
+        <button class="btn btn-sm btn-ghost" data-close-modal="newActionModal">✕</button>
+      </div>
+      <form id="newActionForm" style="display: flex; flex-direction: column; gap: 0.9rem;">
+        <div>
+          <label style="font-size: 0.75rem; color: var(--ink-secondary); display: block; margin-bottom: 0.3rem;">Action Title</label>
+          <input class="input" id="modalActionTitle" type="text" placeholder="Enter action title" required />
+        </div>
+        <div>
+          <label style="font-size: 0.75rem; color: var(--ink-secondary); display: block; margin-bottom: 0.3rem;">Notes (optional)</label>
+          <input class="input" id="modalActionNotes" type="text" placeholder="Optional scope or notes" />
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 90px; gap: 0.6rem;">
+          <div>
+            <label style="font-size: 0.75rem; color: var(--ink-secondary); display: block; margin-bottom: 0.3rem;">Category</label>
+            <select class="select" id="modalActionCategory">
+              <option value="study">Study</option>
+              <option value="work">Work</option>
+              <option value="personal">Personal</option>
+              <option value="health">Health</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size: 0.75rem; color: var(--ink-secondary); display: block; margin-bottom: 0.3rem;">Study Mode</label>
+            <select class="select" id="modalActionStudyMode">
+              <option value="">General</option>
+              <option value="practice_paper">Practice Paper</option>
+              <option value="paper_correction">Paper Correction</option>
+              <option value="anki_review">Anki Review</option>
+              <option value="active_exploration">Active Exploration</option>
+              <option value="problem_set">Problem Set</option>
+              <option value="summary_notes">Summary Notes</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size: 0.75rem; color: var(--ink-secondary); display: block; margin-bottom: 0.3rem;">Minutes</label>
+            <input class="input mono" id="modalActionMins" type="number" min="5" max="240" value="35" />
+          </div>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem;">
+          <button type="button" class="btn" data-close-modal="newActionModal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Queue Action</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 3: Log Study Session -->
+  <div class="modal-backdrop" id="logStudyModal">
+    <div class="modal-card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.15rem;">
+        <h2 class="serif-display" style="font-size: 1.6rem;">Log Study Session</h2>
+        <button class="btn btn-sm btn-ghost" data-close-modal="logStudyModal">✕</button>
+      </div>
+      <form id="modalStudyLogForm" style="display: flex; flex-direction: column; gap: 0.9rem;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr 90px; gap: 0.55rem;">
+          <div>
+            <label style="font-size: 0.75rem; color: var(--ink-secondary); display: block; margin-bottom: 0.3rem;">Subject</label>
+            <select class="select" id="modalLogSubjectSelect"></select>
+          </div>
+          <div>
+            <label style="font-size: 0.75rem; color: var(--ink-secondary); display: block; margin-bottom: 0.3rem;">Study Mode</label>
+            <select class="select" id="modalLogStudyModeSelect">
+              <option value="practice_paper">Practice Paper</option>
+              <option value="paper_correction">Paper Correction</option>
+              <option value="anki_review">Anki Review</option>
+              <option value="active_exploration">Active Exploration</option>
+              <option value="problem_set">Problem Set</option>
+              <option value="summary_notes">Summary Notes</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size: 0.75rem; color: var(--ink-secondary); display: block; margin-bottom: 0.3rem;">Minutes</label>
+            <input class="input mono" id="modalLogDurationInput" type="number" min="5" max="240" value="45" />
+          </div>
+        </div>
+        <div>
+          <label style="font-size: 0.75rem; color: var(--ink-secondary); display: block; margin-bottom: 0.3rem;">Topic Covered</label>
+          <input class="input" id="modalLogTopicInput" type="text" placeholder="Enter topic or paper covered" required />
+        </div>
+        <div>
+          <label style="font-size: 0.75rem; color: var(--ink-secondary); display: block; margin-bottom: 0.3rem;">Follow-Up Needed Next (optional)</label>
+          <input class="input" id="modalLogFollowupInput" type="text" placeholder="Optional next follow-up or weak area" />
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem;">
+          <button type="button" class="btn" data-close-modal="logStudyModal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Session</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 4: Add / Edit Study Subject -->
+  <div class="modal-backdrop" id="subjectModal">
+    <div class="modal-card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.15rem;">
+        <h2 class="serif-display" style="font-size: 1.6rem;" id="subjectModalTitle">Study Subject</h2>
+        <button class="btn btn-sm btn-ghost" data-close-modal="subjectModal">✕</button>
+      </div>
+      <form id="subjectModalForm" style="display: flex; flex-direction: column; gap: 0.9rem;">
+        <input type="hidden" id="subjectModalId" value="" />
+        <div style="display: grid; grid-template-columns: 1fr 120px 110px; gap: 0.55rem;">
+          <div>
+            <label style="font-size: 0.75rem; color: var(--ink-secondary); display: block; margin-bottom: 0.3rem;">Subject Name</label>
+            <input class="input" id="subjectNameInput" type="text" placeholder="Subject name" required />
+          </div>
+          <div>
+            <label style="font-size: 0.75rem; color: var(--ink-secondary); display: block; margin-bottom: 0.3rem;">Code / Area</label>
+            <input class="input mono" id="subjectCodeInput" type="text" placeholder="Short code" required />
+          </div>
+          <div>
+            <label style="font-size: 0.75rem; color: var(--ink-secondary); display: block; margin-bottom: 0.3rem;">Priority</label>
+            <select class="select" id="subjectPrioritySelect">
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label style="font-size: 0.75rem; color: var(--ink-secondary); display: block; margin-bottom: 0.3rem;">Current Focus Note (optional)</label>
+          <input class="input" id="subjectNotesInput" type="text" placeholder="Optional focus note" />
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem;">
+          <button type="button" class="btn" data-close-modal="subjectModal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Subject</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 5: Unified Exam Target Date -->
+  <div class="modal-backdrop" id="examTargetModal">
+    <div class="modal-card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.15rem;">
+        <h2 class="serif-display" style="font-size: 1.6rem;">Unified Exam Horizon</h2>
+        <button class="btn btn-sm btn-ghost" data-close-modal="examTargetModal">✕</button>
+      </div>
+      <form id="examTargetForm" style="display: flex; flex-direction: column; gap: 0.9rem;">
+        <div>
+          <label style="font-size: 0.75rem; color: var(--ink-secondary); display: block; margin-bottom: 0.3rem;">Exam Title</label>
+          <input class="input" id="examNameInput" type="text" placeholder="Enter your exam name" required />
+        </div>
+        <div>
+          <label style="font-size: 0.75rem; color: var(--ink-secondary); display: block; margin-bottom: 0.3rem;">Target Date</label>
+          <input class="input mono" id="examDateInput" type="date" required />
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem;">
+          <button type="button" class="btn" data-close-modal="examTargetModal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Target</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 6: New Routine or Habit -->
+  <div class="modal-backdrop" id="routineModal">
+    <div class="modal-card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.15rem;">
+        <h2 class="serif-display" style="font-size: 1.6rem;">New Routine or Habit</h2>
+        <button class="btn btn-sm btn-ghost" data-close-modal="routineModal">✕</button>
+      </div>
+      <form id="routineModalForm" style="display: flex; flex-direction: column; gap: 0.9rem;">
+        <div>
+          <label style="font-size: 0.75rem; color: var(--ink-secondary); display: block; margin-bottom: 0.3rem;">Name</label>
+          <input class="input" id="routineNameInput" type="text" placeholder="Enter routine or habit name" required />
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 90px; gap: 0.55rem;">
+          <div>
+            <label style="font-size: 0.75rem; color: var(--ink-secondary); display: block; margin-bottom: 0.3rem;">Type</label>
+            <select class="select" id="routineTypeSelect">
+              <option value="recurring_habit">Standalone Daily Habit</option>
+              <option value="block_sequence">Multi-Step Sequence</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size: 0.75rem; color: var(--ink-secondary); display: block; margin-bottom: 0.3rem;">Time of Day</label>
+            <select class="select" id="routineWindowSelect">
+              <option value="morning">Morning</option>
+              <option value="afternoon">Afternoon</option>
+              <option value="evening">Evening</option>
+              <option value="night">Night</option>
+              <option value="anytime">Anytime</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size: 0.75rem; color: var(--ink-secondary); display: block; margin-bottom: 0.3rem;">Minutes</label>
+            <input class="input mono" id="routineMinsInput" type="number" min="5" max="240" value="25" />
+          </div>
+        </div>
+        <div id="routineSequenceStepsBox" style="display: none;">
+          <label style="font-size: 0.75rem; color: var(--ink-secondary); display: block; margin-bottom: 0.3rem;">Sequence Steps (one per line, optional `:minutes` at end)</label>
+          <textarea class="input" id="routineStepsTextarea" rows="4" placeholder="Step 1: 15&#10;Step 2: 30"></textarea>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem;">
+          <button type="button" class="btn" data-close-modal="routineModal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Routine</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 7: Gemini AI & Security Configuration -->
+  <div class="modal-backdrop" id="settingsModalBackdrop">
+    <div class="modal-card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h2 class="serif-display" style="font-size: 1.6rem;">Gemini AI Configuration</h2>
+        <button class="btn btn-sm btn-ghost" data-close-modal="settingsModalBackdrop">✕</button>
+      </div>
+      <p style="font-size: 0.82rem; color: var(--ink-secondary); margin-bottom: 1.15rem;">
+        Enter your Google Gemini API key to enable server-side voice audio transcription, natural Gemini voice synthesis, and Second Brain Co-Pilot control.
+      </p>
+      <form id="settingsForm" style="display: flex; flex-direction: column; gap: 0.9rem;">
+        <div>
+          <label style="font-size: 0.75rem; color: var(--ink-secondary); display: block; margin-bottom: 0.3rem;">Gemini API Key</label>
+          <input class="input mono" id="geminiApiKeyInput" type="password" placeholder="Paste your Gemini API key" />
+        </div>
+        <div>
+          <label style="font-size: 0.75rem; color: var(--ink-secondary); display: block; margin-bottom: 0.3rem;">Model</label>
+          <select class="select" id="geminiModelSelect">
+            <option value="gemini-3.8-flash">gemini-3.8-flash (Fast voice transcription &amp; live control)</option>
+            <option value="gemini-3.8-pro">gemini-3.8-pro (Deep study &amp; syllabus reasoning)</option>
+          </select>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem;">
+          <button type="button" class="btn" data-close-modal="settingsModalBackdrop">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Configuration</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 8: Password Gate (Shown when ACCESS_PASSWORD is enabled on server) -->
+  <div class="modal-backdrop" id="passwordGateModal">
+    <div class="modal-card">
+      <h2 class="serif-display" style="font-size: 1.6rem; margin-bottom: 0.5rem;">Unlock Command Atelier</h2>
+      <p style="font-size: 0.82rem; color: var(--ink-secondary); margin-bottom: 1rem;">
+        This workspace is protected by an access password.
+      </p>
+      <form id="passwordGateForm" style="display: flex; flex-direction: column; gap: 0.9rem;">
+        <input class="input mono" id="accessPasswordInput" type="password" placeholder="Enter access password" required />
+        <button type="submit" class="btn btn-primary">Unlock Workspace</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 9: Brain Dump Capture (Voice or Text Stream of Consciousness) -->
+  <div class="modal-backdrop" id="brainDumpModal">
+    <div class="modal-card" style="max-width: 580px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.65rem;">
+        <div>
+          <div class="mono" style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent-gold);">SECOND BRAIN CAPTURE</div>
+          <h2 class="serif-display" style="font-size: 1.6rem;">Brain Dump</h2>
+        </div>
+        <button class="btn btn-sm btn-ghost" data-close-modal="brainDumpModal">✕</button>
+      </div>
+      <p style="font-size: 0.84rem; color: var(--ink-secondary); margin-bottom: 1rem;">
+        Speak out loud or type everything on your mind (in Português or English) — tasks for today, later errands, exam subjects, topics you struggled with, or personal goals. Your Second Brain will organize everything into your Queue, Backlog, Syllabus, and Memory Bank automatically.
+      </p>
+      <form id="brainDumpForm" style="display: flex; flex-direction: column; gap: 0.9rem;">
+        <textarea
+          class="input"
+          id="brainDumpTextarea"
+          rows="5"
+          placeholder="Ex: Tenho 90 minutos agora em casa. Preciso revisar Direito Constitucional (Controle de Constitucionalidade está fraco), corrigir a prova de ontem por 35m, comprar café mais tarde e lembrar que minha prova é dia 15 de dezembro..."
+        ></textarea>
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap;">
+          <button type="button" class="btn" id="brainDumpVoiceBtn">
+            🎙️ Record Voice Brain Dump
+          </button>
+          <div style="display: flex; gap: 0.5rem;">
+            <button type="button" class="btn" data-close-modal="brainDumpModal">Cancel</button>
+            <button type="submit" class="btn btn-primary">Process &amp; Organize Everything</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 10: Second Brain Long-Term Memory Bank -->
+  <div class="modal-backdrop" id="memoryModal">
+    <div class="modal-card" style="max-width: 620px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.65rem;">
+        <div>
+          <div class="mono" style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--tone-emerald);">PERSISTENT COGNITIVE CONTEXT</div>
+          <h2 class="serif-display" style="font-size: 1.6rem;">Second Brain Memory Bank</h2>
+        </div>
+        <button class="btn btn-sm btn-ghost" data-close-modal="memoryModal">✕</button>
+      </div>
+      <p style="font-size: 0.82rem; color: var(--ink-secondary); margin-bottom: 1rem;">
+        Your Co-Pilot automatically remembers your goals, preferences, weak spots, and study patterns across conversations—and uses them when planning your day or reviewing your progress.
+      </p>
+
+      <div id="memoryListContainer" style="max-height: 280px; overflow-y: auto; margin-bottom: 1rem; padding-right: 0.25rem;"></div>
+
+      <form id="addMemoryForm" style="display: flex; gap: 0.5rem; padding-top: 0.85rem; border-top: 1px solid var(--glass-border);">
+        <select class="select" id="memoryCategorySelect" style="width: 145px;">
+          <option value="goal">Goal</option>
+          <option value="weak_spot">Weak Spot</option>
+          <option value="preference">Preference</option>
+          <option value="pattern">Study Pattern</option>
+          <option value="insight">Insight</option>
+          <option value="note">Note</option>
+        </select>
+        <input class="input" id="memoryContentInput" type="text" placeholder="Add a fact, goal, or preference for your Second Brain..." required style="flex: 1;" />
+        <button type="submit" class="btn btn-primary">Remember</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
