@@ -350,30 +350,47 @@ async function callGeminiGenerateContent(
   errorMessage: string;
 }> {
   const normalizedPref =
-    !preferredModel || preferredModel === 'gemini-2.5-flash' || preferredModel === 'gemini-2.0-flash'
-      ? 'gemini-3.8-flash'
-      : preferredModel === 'gemini-2.5-pro'
-        ? 'gemini-3.8-pro'
+    !preferredModel || preferredModel === 'gemini-3.8-flash' || preferredModel === 'gemini-2.0-flash'
+      ? 'gemini-2.5-flash'
+      : preferredModel === 'gemini-3.8-pro'
+        ? 'gemini-2.5-pro'
         : preferredModel;
 
   const candidates = Array.from(
     new Set([
       normalizedPref,
-      'gemini-3.8-flash',
-      'gemini-3.8-pro',
-      'gemini-2.5-flash-lite',
       'gemini-2.5-flash',
+      'gemini-2.5-flash-lite',
       'gemini-flash-latest',
     ])
   );
 
   let lastStatus = 0;
   let lastMessage = '';
+  const startTime = Date.now();
+  const TOTAL_BUDGET_MS = 45000;
 
   const trySingleModel = async (modelId: string) => {
     const cleanModel = modelId.replace(/^models\//, '');
+    const remainingBudget = TOTAL_BUDGET_MS - (Date.now() - startTime);
+    if (remainingBudget < 2000) {
+      return { ok: false, parsed: null, status: 504, message: 'Request timed out', model: cleanModel };
+    }
+    const perModelTimeoutMs = Math.min(15000, remainingBudget);
+
+    // Disable thinking tokens on 2.5-flash / 2.5-flash-lite so JSON responses return in ~1-2s instead of timing out
+    const bodyForModel: Record<string, any> = cleanModel.includes('2.5-flash')
+      ? {
+          ...requestBody,
+          generationConfig: {
+            ...(requestBody.generationConfig || {}),
+            thinkingConfig: { thinkingBudget: 0 },
+          },
+        }
+      : requestBody;
+
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5500);
+    const timeout = setTimeout(() => controller.abort(), perModelTimeoutMs);
     try {
       const resp = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${encodeURIComponent(effectiveKey)}`,
@@ -381,7 +398,7 @@ async function callGeminiGenerateContent(
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           signal: controller.signal,
-          body: JSON.stringify(requestBody),
+          body: JSON.stringify(bodyForModel),
         }
       );
 
@@ -422,7 +439,7 @@ async function callGeminiGenerateContent(
     lastStatus = res.status;
     lastMessage = res.message;
 
-    // If Google error message explicitly recommends a replacement model (e.g. "use models/gemini-3.8-flash"), try it immediately
+    // If Google error message explicitly recommends a replacement model (e.g. "use models/gemini-2.5-flash"), try it immediately
     const suggestedMatch = res.message.match(/models\/(gemini-[a-zA-Z0-9._-]+)/);
     if (suggestedMatch && suggestedMatch[1] && !candidates.includes(suggestedMatch[1])) {
       const suggestedRes = await trySingleModel(suggestedMatch[1]);
@@ -441,8 +458,8 @@ async function callGeminiGenerateContent(
     }
   }
 
-  // Dynamic fallback: query /v1beta/models on the user's API key if static model IDs returned 404/503/429
-  if (lastStatus === 404 || lastStatus === 503 || lastStatus === 429) {
+  // Dynamic fallback: query /v1beta/models on the user's API key if static model IDs returned 404/503/429/504
+  if (lastStatus === 404 || lastStatus === 503 || lastStatus === 429 || lastStatus === 504) {
     try {
       const listResp = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(effectiveKey)}`
@@ -605,7 +622,7 @@ async function synthesizeGeminiSpeechWav(
   const cleanText = String(textToSpeak || '').trim();
   if (!cleanText || !effectiveKey) return null;
 
-  const ttsModels = ['gemini-2.5-flash-preview-tts', 'gemini-3.8-flash'];
+  const ttsModels = ['gemini-2.5-flash-preview-tts', 'gemini-2.5-flash'];
   const voiceName = lang === 'pt-BR' ? 'Aoede' : 'Puck';
 
   for (const model of ttsModels) {

@@ -4,6 +4,8 @@ import {
   verifyAccessPassword,
 } from '../../../../lib/api-handlers.ts';
 
+export const maxDuration = 60;
+
 export async function POST(req: Request) {
   if (!verifyAccessPassword(req.headers.get('x-access-password'))) {
     return Response.json({ error: 'Unauthorized', passwordRequired: true }, { status: 401 });
